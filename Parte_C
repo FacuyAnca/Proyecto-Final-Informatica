@@ -1,4 +1,5 @@
 #client_sensor.py
+import matplotlib.pyplot as plt
 
 HOST = '0.0.0.0'  
 PORT = 5000
@@ -11,7 +12,9 @@ print(f"Servidor escuchando en {HOST}:{PORT}")
 try:
     cliente, direccion = servidor.accept()
     print(f"Cliente conectado desde {direccion}")
-
+    plt.ion()  # Activar modo interactivo
+    fig, ax = plt.subplots()
+    
     while True:
         lectura = sensor_temp.read()
         if lectura is not None:
@@ -24,6 +27,18 @@ try:
             except BrokenPipeError:
                 print("Cliente desconectado")
                 break
+        capturasTemperatura.append(temp_c) #Guardamos las capturas para graficar
+        capturasFecha.append(datetime.now().strftime("%H:%M:%S"))
+
+        ax.clear() #Creamos el grafico fuera del while para que no se sobrepongan
+        ax.plot(capturasFecha, capturasTemperatura, marker="o")
+        ax.set_xlabel("Hora")
+        ax.set_ylabel("Temperatura (°C)")
+        ax.set_title("Registro de Temperatura")
+        ax.tick_params(axis='x', rotation=45)
+        ax.grid(True)
+        plt.pause(0.1)  # Pausa corta para actualizar el gráfico (no usar plt.show() dentro del bucle)
+
 except KeyboardInterrupt:
     print("Servidor finalizado")
     #Cerrar conexiones
