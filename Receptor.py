@@ -1,58 +1,55 @@
 import socket
 import matplotlib.pyplot as plt
-import time
-import json
 
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server_ip = '192.168.56.1'  # IP del servidor
-server_port = 31415
-client_socket.connect((server_ip, server_port))
-print("Conectado al servidor\n")
+# Crear socket TCP/IP
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_ip = '192.168.204.39'  # IP del servidor
+server_port = 12345
+server_socket.bind((server_ip, server_port))
+server_socket.listen(1)
 
-plt.ion()
-fig, ax = plt.subplots()
-line, = ax.plot([], [], 'r-', label="Temperatura (°C)")
-ax.set_xlabel("Tiempo [s]")
-ax.set_ylabel("Temperatura (°C)")
-ax.set_title("Lecturas del sensor en tiempo real")
-ax.legend()
-ax.grid(True)
+print(f"Servidor escuchando en {server_ip}:{server_port}")
+conn, addr = server_socket.accept()
+print(f"Conexión establecida con {addr}")
 
 tiempos = []
 temperaturas = []
-t0 = time.time()
+promedios = []
+
+plt.ion()  # Modo interactivo para actualizar el gráfico en tiempo real
 
 try:
     while True:
-        data = client_socket.recv(1024).decode().strip()
+        data = conn.recv(1024)
         if not data:
             break
+        mensaje = data.decode()
+        print(f"Recibido: {mensaje}")
 
-        try:
-            datos = json.loads(data)
-            temp = float(datos["Temperatura"])
-            tendencia = datos["Tendencia"]   # texto
-            hora = datos["Hora"]              # string
-        except (json.JSONDecodeError, KeyError, ValueError):
-            continue
+        # Parsear
+        partes = mensaje.split('|')
+        hora = partes[0].strip()
+        temp = float(partes[1].split(':')[1].replace('°C','').strip())
+        prom = float(partes[2].split(':')[1].replace('°C','').strip())
 
+        # Guardar
+        tiempos.append(hora)
         temperaturas.append(temp)
-        tiempos.append(time.time() - t0)
-
-        print(f"Temp: {temp:.2f}°C | Tendencia: {tendencia} | Hora: {hora}")
+        promedios.append(prom)
 
         # Actualizar gráfico
-        line.set_xdata(tiempos)
-        line.set_ydata(temperaturas)
-        ax.set_xlim(0, max(tiempos)+1)
-        ax.relim()
-        ax.autoscale_view()
-        plt.pause(0.1)
-        plt.draw()
-
-except KeyboardInterrupt:
-    print("\nCliente detenido manualmente.")
+        plt.cla()
+        plt.plot(tiempos, temperaturas, label='Temp')
+        plt.plot(tiempos, promedios, label='Promedio', linestyle='--')
+        plt.xlabel('Tiempo')
+        plt.ylabel('°C')
+        plt.title('Temperatura en tiempo real')
+        plt.legend()
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.pause(0.01)
 
 finally:
-    client_socket.close()
-    print("Conexión cerrada.")
+    conn.close()
+    server_socket.close()
+    print("Caso cerrado.")
