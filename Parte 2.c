@@ -154,11 +154,23 @@ int main(void) {
     printf("La media es de %.2f grados C\n", media);
     
     // Mediana
+    
+        // Crear arreglo auxiliar
+        Captura capturasOrdenadas[n];
+
+        // Organiza las temps en orden ascendente 
+        for (int i = 0; i < n; i++) {
+            int j = i;
+            for (; j > 0 && capturasOrdenadas[j - 1].temperatura > capturas[i].temperatura; j--)
+                capturasOrdenadas[j] = capturasOrdenadas[j - 1];
+            capturasOrdenadas[j] = capturas[i];
+        }
+
     double mediana = 0;
     if(n%2!=0){
-        mediana=capturas[n/2].temperatura;
+        mediana=capturasOrdenadas[n/2].temperatura; // Ahora toma la verdadera mediana
     }else{
-        mediana=(capturas[n/2].temperatura+capturas[n/2-1].temperatura)/(2);
+        mediana=(capturasOrdenadas[n/2].temperatura+capturasOrdenadas[n/2-1].temperatura)/(2);
     }
     printf("La mediana es de %.2f grados C\n", mediana);
     
