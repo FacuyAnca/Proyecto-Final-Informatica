@@ -1,78 +1,75 @@
-import socket                 # Para manejar conexiones de red (TCP en este caso)
-import matplotlib.pyplot as plt  # Para graficar datos en tiempo real
-
-# ============================================================
-# CONFIGURACIÓN DEL SERVIDOR TCP
-# ============================================================
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
-# Crea un socket TCP (AF_INET = IPv4, SOCK_STREAM = TCP)
-
-server_ip = '192.168.204.39'  # Dirección IP donde va a escuchar el servidor
-server_port = 12345           # Puerto de escucha (debe ser el mismo del cliente)
-
-server_socket.bind((server_ip, server_port))  # Asocia el socket a la IP y el puerto
-server_socket.listen(1)       # Comienza a escuchar conexiones (1 = solo una conexión permitida)
+import socket
+import matplotlib.pyplot as plt
+# Crear socket TCP/IP
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_ip = '10.16.115.80'  # IP del servidor
+server_port = 12345
+server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 262144)
+server_socket.bind((server_ip, server_port))
+server_socket.listen(1)
 
 print(f"Servidor escuchando en {server_ip}:{server_port}")
-conn, addr = server_socket.accept()  # Espera a que un cliente se conecte (bloqueante)
+conn, addr = server_socket.accept()
 print(f"Conexión establecida con {addr}")
 
-# ============================================================
-# LISTAS PARA GUARDAR DATOS Y GRAFICAR
-# ============================================================
-tiempos = []        # Guarda los tiempos de cada recepción
-temperaturas = []   # Guarda temperatura actual
-promedios = []      # Guarda el promedio móvil enviado por el cliente
+tiempos = []
+temperaturas = []
+promedios = []
 
-plt.ion()  # Activa el modo interactivo para actualizar el gráfico en vivo
+plt.ion()
+plt.figure()
+plt.show()
 
-# ============================================================
-# BUCLE PRINCIPAL DE RECEPCIÓN Y GRAFICADO
-# ============================================================
+
+
 try:
     while True:
-        data = conn.recv(1024)   # Recibe hasta 1024 bytes del cliente
-        if not data:             # Si no llega nada, se terminó la conexión
-            break
+        try:
+            data = conn.recv(1024)
+            if not data:
+                break
+        except TimeoutError:
+            continue  # si no hay datos, seguir sin cortar el bucle
 
-        mensaje = data.decode()  # Decodifica los bytes a texto
-        print(f"Recibido: {mensaje}")
+        mensajes = data.decode().split('\n')  # separa los mensajes por salto de línea
+        for mensaje in mensajes:
+            mensaje = mensaje.strip()
+            if not mensaje:
+                continue
 
-        # -------------------------
-        # PARSEAR DATOS DEL MENSAJE
-        # -------------------------
-        partes = mensaje.split('|')  # Divide el mensaje en sus partes: hora | temp | prom
+            partes = mensaje.split('|')
+            if len(partes) < 3:  
+                continue
+            print(f"Recibido: {mensaje}")
 
-        hora = partes[0].strip()     # Extrae la hora
-        temp = float(partes[1].split(':')[1].replace('°C', '').strip())   # Extrae temperatura como número
-        prom = float(partes[2].split(':')[1].replace('°C', '').strip())   # Extrae promedio como número
+            partes = mensaje.split('|')
 
-        # -------------------------
-        # GUARDAR DATOS EN LISTAS
-        # -------------------------
-        tiempos.append(hora)
-        temperaturas.append(temp)
-        promedios.append(prom)
+            hora = partes[0].strip()
+            temp = float(partes[1].split(':')[1].replace('°C', '').strip())
+            prom = float(partes[2].split(':')[1].replace('°C', '').strip())
 
-        # -------------------------
-        # ACTUALIZAR GRAFICO EN TIEMPO REAL
-        # -------------------------
-        plt.cla()  # Limpia la gráfica anterior para dibujar sobre la misma ventana
-        plt.plot(tiempos, temperaturas, label='Temp')
-        plt.plot(tiempos, promedios, label='Promedio', linestyle='--')
+            tiempos.append(hora)
+            temperaturas.append(temp)
+            promedios.append(prom)
 
-        plt.xlabel('Tiempo')
-        plt.ylabel('°C')
-        plt.title('Temperatura en tiempo real')
-        plt.legend()
-        plt.xticks(rotation=45)  # Rota las etiquetas para que no se encimen
-        plt.tight_layout()
-        plt.pause(0.01)         # Pequeña pausa para actualizar la imagen
+            # actualizar gráfico
+            plt.cla()
+            plt.plot(tiempos, temperaturas, label='Temp')
+            plt.plot(tiempos, promedios, label='Promedio', linestyle='--')
+            plt.xlabel('Tiempo')
+            plt.ylabel('°C')
+            plt.title('Temperatura en tiempo real')
+            plt.legend()
+            plt.xticks(rotation=90)
+            plt.tight_layout()
+            plt.pause(0.01)
 
-# ============================================================
-# FINALIZAR CONEXIÓN
-# ============================================================
+finally:
+    conn.close()
+    server_socket.close()
+    print("Caso cerrado.")
 finally:
     conn.close()           # Cierra conexión con el cliente
     server_socket.close()  # Cierra el servidor
     print("Caso cerrado.")
+
