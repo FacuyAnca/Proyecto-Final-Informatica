@@ -18,7 +18,7 @@ if not hasattr(inspect, "getargspec"):
     inspect.getargspec = inspect.getfullargspec
 
 # --- Conexión a Arduino ---
-board = pyfirmata.Arduino('COM4')
+board = pyfirmata.Arduino('COM6')
 print("Conectado a Arduino en COM6\n")
 
 # --- Variables Globales ---
@@ -71,7 +71,24 @@ for _ in range(10):
     time.sleep(0.1)
 
 print("Programa iniciado. Ctrl+C para salir.\n")
+# --------------------------------------------------------------------
+# ------------------ CONFIGURACIÓN DEL SERVIDOR ----------------------
+# --------------------------------------------------------------------
 
+# Crea un socket cliente, conectandose a otro dispositivo (canal de comunicación por red)
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# Indicamos la IP y el pierto por el que nos vamos a conectar
+server_ip = '10.245.52.39'
+server_port = 12345
+
+print(f"Conectando al servidor en {server_ip}:{server_port}...")
+
+# Establecemos la conexión TCP, se conecta a dicha computador
+client_socket.connect((server_ip, server_port))
+print("Servidor conectado correctamente.\n")
+# Si del otro lado hay receptor se conecta, si no da error
+servidor_conectado = True
 # --------------------------------------------------------------------
 # ------------------------ BUCLE PRINCIPAL ---------------------------
 # --------------------------------------------------------------------
@@ -98,31 +115,48 @@ try:
         # ----------- CONTROL DEL BOTÓN DENTRO DEL BUCLE ------------
         # ===========================================================
 
+        # Si el boton nos da una entrada no nula se activa el if, evitando asi procesar basura
         if estado is not None:
-            estado = bool(estado)
+            # Convertimos entonces el estado en un booleano
+            estado = bool(estado) # caso base si no esta conectado boton
 
+            # Detecta el momento exacto que el boton pasa de estar no presionado a presionado
             if estado and not presionado:
+                # Actualizamos el estado interno del sistema
                 presionado = True
+                # Guardamos el instante en que se presionó el boton, empezando a contar el tiempo
+                # Necesitamos detectar el momento en que el botón fue presionado, no simplemente que está presionado
                 inicio_pulso = time.time()
+                # Prendemos los tres leds al mismo tiempo para visualizar que se presonó
                 led_verde.write(1)
                 led_amarillo.write(1)
                 led_rojo.write(1)
-                n = 0.05
+                # n (periodo de muestreo), cada cuanto segundos se toma lectura
+                # Boton apretado: se fija en un valor pequeño para detectar la duración con precisión
+                n=0.05
 
+            # Cuando se suelta, el boton estaba presionado y ahora ya no
             elif not estado and presionado:
+                # De forma análoga, actualizamos el estado interior
                 presionado = False
+                # Calculamos la cantidad de tiempo que el boton estuvo presionado
                 duracion = time.time() - inicio_pulso
+                # Apagamos los leds
                 led_verde.write(0)
                 led_amarillo.write(0)
                 led_rojo.write(0)
 
+                #Si la duración es extremadamente corta, se sale del programa
                 if duracion <= 0.2:
                     print(f"Botón mantenido {duracion:.2f}s → Finalizando programa...")
                     salir = True
+                # Si la duración es menor a nuestro mínimo, entonces la asignamos como el valor minimo
                 elif duracion < 2.5:
                     n = 2.5
+                # Si la duración es mayor que maximo, se asigna el maximo
                 elif duracion > 10:
                     n = 10
+                # Si la duración no es menor ni mayor que nuestros extremos, dará el nuevo valor de actualización
                 else:
                     n = duracion
 
@@ -131,20 +165,28 @@ try:
 
         # -------- LECTURA DE TEMPERATURA Y ENVÍO AL SERVIDOR -----------
 
-        if lectura is not None and (ahora - inicio) >= n:
+        # Si hay una lectura valida y ya pasaron los respetivos segundo de la última toma entramos al bucle
+        if lectura is not None and (ahora - inicio) >= n: #toma lecturas cada n segundos dados por el boton
 
+            # Aplicamos una curva de calibración empírica para convertir la lectura a C
             temp_c = (lectura * lectura * lectura) - (25 * lectura) + 30  
 
+            #Asiganmos la hora especifica a una variable y la imprimimor con su respectiva temperatura con dos decimales
             hora = datetime.now().strftime("%H:%M:%S")
             print(f"{hora} | Temperatura: {temp_c:.2f} °C")
 
+            # En una linea actualizamos todas las variables que darán el promedio
             t5, t4, t3, t2, t1 = t4, t3, t2, t1, temp_c
+            # Actualizamos la variable que cuenta las veces que hemos tomado capturas
             flag += 1
-
-            if flag > 4 and not presionado:
+            # Si tenemos lo suficiente para calcular el promedio
+            if flag > 4:
+                # Calculamos el promedio
                 promedio = (t1 + t2 + t3 + t4 + t5) / 5
                 print(f"Temperatura promedio: {promedio:.2f} °C")
 
+                # Analizamos las tres posibilidades, prendiendo los respectivos leds y asignamos valores de tendencias
+                # Lo hacemos muy receptivo a cambios de temperatura pequeños
                 if temp_c < 0.965 * promedio:
                     led_verde.write(1); led_amarillo.write(0); led_rojo.write(0)
                     tendencia = 'BAJA'
@@ -154,6 +196,7 @@ try:
                 else:
                     led_verde.write(0); led_amarillo.write(1); led_rojo.write(0)
                     tendencia = 'MEDIA'
+            #Si no hay valores para calcular el prmedio prendemos todos los leds
             else:
                 led_verde.write(1); led_amarillo.write(1); led_rojo.write(1)
 
@@ -167,7 +210,7 @@ try:
             if (ahora - inicio) >= n:
                 inicio = ahora
 
-                if flag > 4:
+                if flag > 4 and not presionado:
                     promedio = (t1 + t2 + t3 + t4 + t5) / 5
                     print(f"Temperatura promedio: {promedio:.2f} °C")
 
@@ -203,9 +246,27 @@ try:
             capturasTendencia.append(tendencia)
             capturasFecha.append(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
             
+            # Si hay conexión y el objeto client_socket existe se lanza el if
+            if servidor_conectado and client_socket:
+                try:
+                    # Construye un texto con los datos de la captura
+                    mensaje = f"{hora} | Temp: {temp_c:.2f}°C | Prom: {promedio:.2f}°C"
+                    # Enviamos todo el mensaje
+                    client_socket.sendall(mensaje.encode())
+
+                # Si ocurre un error (por ejemplo servidor apagado) se imprime y se actualiza la variable
+                except Exception as e:
+                    print(f"Error al enviar datos: {e}")
+                    servidor_conectado = False
+            # Si no hubo conexión o se cayó se imprime
+            else:
+                print("Servidor no conectado, datos no enviados.\n")
+
             # Resteamos el temporizador del periodo de muestreo
             inicio = ahora
-        time.sleep(0.05)
+
+            #Pequeña pausa entre bucles
+            time.sleep(0.05)
 
 # Si se interrumpe por teclado entonces se sale del programa
 except KeyboardInterrupt:
@@ -229,6 +290,9 @@ finally:
     led_amarillo.write(0)
     led_rojo.write(0)
     board.exit()
+
+    # Cerramos comunicación TCP
+    client_socket.close()
 
 
 
