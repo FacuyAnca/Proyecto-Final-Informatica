@@ -65,11 +65,8 @@ try:
             plt.pause(0.01)
 
 finally:
-    conn.close()
-    server_socket.close()
-    print("Caso cerrado.")
-finally:
     conn.close()           # Cierra conexión con el cliente
     server_socket.close()  # Cierra el servidor
     print("Caso cerrado.")
+
 
